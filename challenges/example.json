@@ -1,0 +1,19 @@
+{
+  "language": "python",
+  "baseCode": "n=int(input())\nprint(n*n)\n",
+  "testcases": [
+    {
+      "input": "2\n",
+      "expected": "4"
+    },
+    {
+      "input": "5\n",
+      "expected": "25"
+    },
+    {
+      "input": "10\n",
+      "expected": "100"
+    }
+  ],
+  "similarityThreshold": 70
+}
