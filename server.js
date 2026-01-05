@@ -4,9 +4,10 @@ import fs from "fs";
 
 import { runTestcases } from "./runner/runTestcases.js";
 import { computeSimilarity } from "./similarity/index.js";
+import { executionLimiter } from "./limits/executionLimiter.js";
 
 const app = express();
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "100kb" }));
 
 app.post("/submit", async (req, res) => {
   const { challengeId, submittedCode } = req.body;
@@ -15,11 +16,13 @@ app.post("/submit", async (req, res) => {
     fs.readFileSync(`./challenges/${challengeId}.json`)
   );
 
-  const result = await runTestcases({
-    language: challenge.language,
-    code: submittedCode,
-    testcases: challenge.testcases
-  });
+  const result = await executionLimiter.run(() => 
+    runTestcases({
+      language: challenge.language,
+      code: submittedCode,
+      testcases: challenge.testcases
+    })
+  );
 
   if (result.status != "accepted") {
     return res.json({
