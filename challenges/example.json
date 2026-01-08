@@ -15,5 +15,9 @@
       "expected": "100"
     }
   ],
-  "similarityThreshold": 70
+  "similarityThreshold": 90,
+  "anchors": [
+    "input",
+    "print"
+  ]
 }

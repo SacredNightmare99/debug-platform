@@ -1,16 +1,42 @@
-import { structuralSimilarity } from "./structural.js";
-import { tokenSimilarity } from "./token.js";
-import { changeRatioScore } from "./changeRatio.js";
+import { weightedSimilarity } from "./weightedDiff.js";
+import { localityScore } from "./locality.js";
+import { anchorScore } from "./anchors.js";
+import { hardcodePenalty } from "./hardcode.js";
+import { composeScore } from "./scoreCompose.js";
+import { normalize } from "./normalize.js";
 
-export function computeSimilarity(base, submitted) {
-  const s = structuralSimilarity(base, submitted);
-  const t = tokenSimilarity(base, submitted);
-  const c = changeRatioScore(base, submitted);
+export function computeSimilarity({
+  baseCode,
+  submittedCode,
+  language,
+  anchors = [],
+  expectedOutputs = []
+}) {
+  const weighted = weightedSimilarity(baseCode, submittedCode, language);
+  const locality = localityScore(baseCode, submittedCode);
+  const anchorsScore = anchorScore(submittedCode, anchors);
+  const structure =
+    normalize(baseCode, language) === normalize(submittedCode, language) ? 100 : 70;
 
-  return (
-    0.5 * s +
-    0.3 * t +
-    0.2 * c
-  );
+  const penalty = hardcodePenalty(submittedCode, baseCode, expectedOutputs);
+
+  const total = composeScore({
+    weighted,
+    locality,
+    anchors: anchorsScore,
+    structure,
+    penalty
+  });
+
+  return {
+    total: Math.max(0, Math.min(100, total)),
+    breakdown: {
+      weighted: Number(weighted.toFixed(2)),
+      locality: Number(locality.toFixed(2)),
+      anchors: Number(anchorsScore.toFixed(2)),
+      structure: Number(structure.toFixed(2)),
+      penalty: Number(penalty.toFixed(2))
+    }
+  };
 }
 
