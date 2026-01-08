@@ -2,26 +2,35 @@
 
 A backend service for **debugging-style coding challenges** where participants are expected to **fix bugs in an existing codebase**, not rewrite solutions from scratch.
 
-The platform evaluates submissions in **two independent phases**:
+The platform evaluates submissions in **two strictly separated phases**:
 
-1. **Functional correctness** (via testcases in a sandboxed runtime)
-2. **Code similarity** (to ensure minimal, genuine debugging)
+1. **Functional correctness** (sandboxed execution with testcases)
+2. **Debug-effort similarity** (to ensure minimal, genuine fixes)
 
-Supported languages:
+This system is **not a plagiarism checker**.
+It is a **debugging fidelity evaluator**.
+
+---
+
+## Supported Languages
+
+Currently supported:
 
 * **C**
 * **Python**
-* **JavaScript**
 
 ---
 
 ## Core Design Principles
 
-* **Correctness first, similarity second**
+* **Correctness always comes first**
+* **Similarity is evaluated only after correctness**
 * **Single-file challenges only**
-* **Language defined by the challenge, not the user**
+* **Language is defined by the challenge, never by the user**
 * **High similarity is good** (debugging ≠ rewriting)
-* **Sandboxed execution using Docker**
+* **Formatting and variable renames are allowed**
+* **Rewrites are penalized even if correct**
+* **All execution is sandboxed using Docker**
 
 ---
 
@@ -32,17 +41,23 @@ debug-platform/
 ├── docker/
 │   ├── c.Dockerfile
 │   ├── py.Dockerfile
-│   └── js.Dockerfile
 │
 ├── runner/
 │   ├── runSingleTest.js
 │   ├── runTestcases.js
 │   └── outputMatch.js
 │
+├── limits/
+│   └── executionLimiter.js
+│
 ├── similarity/
-│   ├── structural.js
-│   ├── token.js
-│   ├── changeRatio.js
+│   ├── normalize.js
+│   ├── lineClassifier.js
+│   ├── weightedDiff.js
+│   ├── locality.js
+│   ├── anchors.js
+│   ├── hardcode.js
+│   ├── scoreCompose.js
 │   └── index.js
 │
 ├── challenges/
@@ -59,7 +74,7 @@ debug-platform/
 
 Each challenge is defined as a JSON file.
 
-### Example: `challenges/example.json`
+### Example
 
 ```json
 {
@@ -70,18 +85,55 @@ Each challenge is defined as a JSON file.
     { "input": "5\n", "expected": "25" },
     { "input": "10\n", "expected": "100" }
   ],
+  "anchors": ["scanf", "printf"],
   "similarityThreshold": 70
 }
 ```
 
-### Fields Explained
+---
 
-| Field                 | Description                                           |
-| --------------------- | ----------------------------------------------------- |
-| `language`            | Execution language (`c`, `python`, `javascript`)      |
-| `baseCode`            | Buggy reference implementation                        |
-| `testcases`           | Input/output pairs (stdin/stdout)                     |
-| `similarityThreshold` | Minimum similarity % required after passing testcases |
+### Challenge Fields Explained
+
+| Field                 | Description                                                   |
+| --------------------- | ------------------------------------------------------------- |
+| `language`            | Execution language (`c`, `python`)                            |
+| `baseCode`            | Buggy reference implementation (full file as string)          |
+| `testcases`           | List of stdin/stdout pairs                                    |
+| `anchors`             | *(Optional)* semantic landmarks that should survive debugging |
+| `similarityThreshold` | Minimum similarity % required **after** passing testcases     |
+
+---
+
+## Anchors (Important Concept)
+
+**Anchors are semantic landmarks**, not strict requirements.
+
+They answer the question:
+
+> *Did the participant preserve the original algorithm while fixing bugs?*
+
+Examples of good anchors:
+
+* Function names
+* Helper utilities
+* Macros
+* Algorithm-specific strings
+* Key helper calls
+
+Examples of bad anchors:
+
+* Variable names
+* Formatting
+* Keywords like `int`, `return`
+* Magic numbers
+
+Anchors:
+
+* **Never block a correct solution**
+* **Only influence similarity**
+* **Scale with problem complexity**
+
+Small challenges may use **no anchors at all**.
 
 ---
 
@@ -89,7 +141,7 @@ Each challenge is defined as a JSON file.
 
 ### `POST /submit`
 
-Submits a solution for evaluation.
+Submit a solution for evaluation.
 
 #### Request Body
 
@@ -100,25 +152,25 @@ Submits a solution for evaluation.
 }
 ```
 
+Rules:
+
 * `submittedCode` must contain the **entire file**
-* No language is sent by the client
-* File must be **text only**
+* Language is inferred from the challenge
+* Text files only (no binaries, no archives)
 
 ---
 
-## Evaluation Flow (Important)
-
-The server always follows this order:
+## Evaluation Flow (Strict Order)
 
 1. **Run all testcases**
-2. If any testcase fails → return failure immediately
+2. If any testcase fails → return immediately
 3. If all testcases pass:
 
    * Compute similarity
-   * Compare against threshold
-4. Return results **separately**
+   * Compare with threshold
+4. Return results **clearly separated**
 
-Similarity is **never computed** if testcases fail.
+👉 **Similarity is never computed if testcases fail.**
 
 ---
 
@@ -136,7 +188,7 @@ Similarity is **never computed** if testcases fail.
 }
 ```
 
-Possible `reason` values:
+Possible reasons:
 
 * `runtime-error`
 * `wrong-output`
@@ -147,13 +199,18 @@ Possible `reason` values:
 
 ```json
 {
-  "testcases": {
-    "status": "passed"
-  },
+  "testcases": { "status": "passed" },
   "similarity": {
-    "score": 52.31,
+    "score": 58.44,
     "threshold": 70,
-    "passed": false
+    "passed": false,
+    "breakdown": {
+      "weighted": 60.12,
+      "locality": 80.00,
+      "anchors": 33.33,
+      "structure": 70.00,
+      "penalty": -10.00
+    }
   }
 }
 ```
@@ -164,62 +221,89 @@ Possible `reason` values:
 
 ```json
 {
-  "testcases": {
-    "status": "passed"
-  },
+  "testcases": { "status": "passed" },
   "similarity": {
-    "score": 91.04,
+    "score": 94.23,
     "threshold": 70,
-    "passed": true
+    "passed": true,
+    "breakdown": {
+      "weighted": 100.00,
+      "locality": 100.00,
+      "anchors": 100.00,
+      "structure": 100.00,
+      "penalty": 0.00
+    }
   }
 }
 ```
 
+All similarity values are **rounded to 2 decimal places**.
+
 ---
 
-## Similarity Scoring (How It Works)
+## Similarity Scoring (v2 – Debug-Aware)
 
-Similarity is a **hybrid score**, designed for debugging challenges.
+Similarity is a **weighted composite score**:
 
 ```
 Final Score =
-  50% Structural Similarity
-+ 30% Token Similarity
-+ 20% Change Ratio
+  40% Weighted Line Similarity
++ 20% Edit Locality
++ 20% Anchor Preservation
++ 20% Structural Similarity
++ Penalties
 ```
 
 ### What It Rewards
 
-* Minimal edits
-* Preserved structure
+* Minimal, localized edits
+* Preserved control flow
 * Variable renames
-* Formatting changes
+* Formatting / whitespace changes
+* Debug-style fixes
 
 ### What It Penalizes
 
 * Full rewrites
-* Different algorithms
 * Hardcoded outputs
+* Algorithm replacement
+* Removing core helpers
+* Output-only solutions
 
 ---
 
 ## Runtime Execution
 
-All code is executed inside **Docker sandboxes** with:
+All code runs inside **Docker sandboxes** with:
 
 * No network access
-* Memory limit
-* CPU limit
-* Timeout
-* PID limit
+* Memory limits
+* CPU limits
+* Execution timeouts
+* Process isolation
 
 ### Language Runners
 
-| Language   | Docker Image         |
-| ---------- | -------------------- |
-| C          | `gcc:13`             |
-| Python     | `python:3.12-alpine` |
-| JavaScript | `node:20-alpine`     |
+| Language | Docker Image         |
+| -------- | -------------------- |
+| C        | `gcc:13`             |
+| Python   | `python:3.12-alpine` |
+
+---
+
+## Concurrency Control
+
+To protect the host system:
+
+* Submissions are executed through an **in-process concurrency limiter**
+* Only a small number of executions run at once
+* Excess requests wait safely in memory
+
+This avoids:
+
+* Docker overload
+* CPU starvation
+* Random failures under load
 
 ---
 
@@ -231,15 +315,18 @@ All code is executed inside **Docker sandboxes** with:
 npm install
 ```
 
+---
+
 ### 2. Build Docker Runners
 
 ```bash
 docker build -t runner-c  -f docker/c.Dockerfile .
 docker build -t runner-py -f docker/py.Dockerfile .
-docker build -t runner-js -f docker/js.Dockerfile .
 ```
 
-### 3. Docker Permissions (Required)
+---
+
+### 3. Docker Permissions (Linux)
 
 ```bash
 sudo usermod -aG docker $USER
@@ -268,9 +355,9 @@ http://localhost:3000
 
 ---
 
-## Submitting Code (Examples)
+## Submitting Code
 
-### Using `curl` with a real file
+### Using `curl` (recommended)
 
 ```bash
 curl -X POST http://localhost:3000/submit \
@@ -282,7 +369,7 @@ curl -X POST http://localhost:3000/submit \
 
 ---
 
-### Browser / Frontend Upload
+### From a Frontend
 
 ```js
 const file = input.files[0];
