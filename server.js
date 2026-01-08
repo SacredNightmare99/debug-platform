@@ -48,15 +48,18 @@ app.post("/submit", async (req, res) => {
   console.log(`[REQ ${reqId}] Testcases PASSED`);
   console.log(`[REQ ${reqId}] Computing similarity...`);
 
-  const similarity = computeSimilarity(
-    challenge.baseCode,
-    submittedCode
-  );
+  const similarity = computeSimilarity({
+    baseCode: challenge.baseCode,
+    submittedCode,
+    language: challenge.language,
+    anchors: challenge.anchors || [],
+    expectedOutputs: challenge.testcases.map(t => t.expected)
+  });
   
-  const passed = similarity >= challenge.similarityThreshold;
+  const passed = similarity.total >= challenge.similarityThreshold;
 
   console.log(
-    `[REQ ${reqId}] Similarity: ${similarity.toFixed(2)}% | Passed: ${passed}`
+    `[REQ ${reqId}] Similarity: ${similarity.total.toFixed(2)}% | Passed: ${passed}`
   );
 
   res.json({
@@ -64,8 +67,9 @@ app.post("/submit", async (req, res) => {
       status: "passed"
     },
     similarity: {
-      score: Number(similarity.toFixed(2)),
-      passed: passed
+      score: Number(similarity.total.toFixed(2)),
+      passed: passed,
+      breakdown: similarity.breakdown
     }
   });
 });
