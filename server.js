@@ -34,7 +34,7 @@ app.post("/submit", async (req, res) => {
 
   if (result.status !== "accepted") {
     console.log(
-      `[REQ ${reqId}] Testcases FAILED | Reason: ${testcaseResult.status}`
+      `[REQ ${reqId}] Testcases FAILED | Reason: ${result.status}`
     );
     return res.json({
       testcases: {
