@@ -3,7 +3,7 @@ import { outputsMatch } from "./outputMatch.js";
 
 export async function runTestcases({ language, code, testcases }) {
   for (let i = 0; i < testcases.length; i++) {
-    const res = runSingleTest({
+    const res = await runSingleTest({
       language,
       code,
       input: testcases[i].input

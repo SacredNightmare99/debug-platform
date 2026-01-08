@@ -1,45 +1,98 @@
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { spawn } from "child_process";
 
 const FILES = {
-  javascript: "main.js",
   python: "main.py",
   c: "main.c"
 };
 
 const IMAGES = {
-  javascript: "runner-js",
   python: "runner-py",
   c: "runner-c"
 };
 
 export function runSingleTest({ language, code, input }) {
-  const dir = fs.mkdtempSync("/tmp/run-");
-  fs.writeFileSync(path.join(dir, FILES[language]), code);
+  return new Promise((resolve) => {
+    const dir = fs.mkdtempSync("/tmp/run-");
+    const filePath = path.join(dir, FILES[language]);
 
-  try {
-    const output = execSync(
-      `docker run --rm -i \
-       --memory=64m \
-       --cpus=0.5 \
-       --network=none \
-       --pids-limit=64 \
-       -v ${dir}:/app \
-       ${IMAGES[language]}`,
+    fs.writeFileSync(filePath, code);
+
+    const child = spawn(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "-i",
+        "--memory=64m",
+        "--cpus=0.5",
+        "--network=none",
+        "--pids-limit=64",
+        "-v",
+        `${dir}:/app`,
+        IMAGES[language]
+      ],
       {
-        input,
-        timeout: 2000,
-        maxBuffer: 1024 * 1024
+        stdio: ["pipe", "pipe", "pipe"]
       }
-    ).toString();
+    );
 
-    return { success: true, output };
-  } catch (e) {
-    return {
-      success: false,
-      error: e.stderr?.toString() || "Runtime error"
-    };
-  }
+    let stdout = "";
+    let stderr = "";
+    let finished = false;
+
+    child.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    child.stdin.write(input);
+    child.stdin.end();
+
+    const timeout = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        child.kill("SIGKILL");
+
+        cleanup();
+        resolve({
+          success: false,
+          error: "Time limit exceeded"
+        });
+      }
+    }, 2000);
+
+    child.on("close", (code) => {
+      if (finished) return;
+      finished = true;
+
+      clearTimeout(timeout);
+      cleanup();
+
+      if (code === 0) {
+        resolve({
+          success: true,
+          output: stdout
+        });
+      } else {
+        resolve({
+          success: false,
+          error: stderr || "Runtime error"
+        });
+      }
+    });
+
+    function cleanup() {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch (_) {
+        // ignore cleanup errors
+      }
+    }
+  });
 }
 

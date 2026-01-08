@@ -23,5 +23,5 @@ class ExecutionLimiter {
   }
 }
 
-export const executionLimiter = new ExecutionLimiter(2);
+export const executionLimiter = new ExecutionLimiter(10);
 
