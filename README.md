@@ -63,6 +63,12 @@ debug-platform/
 ├── challenges/
 │   └── example.json
 │
+├── logs/
+│   └── requestLogger.js
+│
+├── utils/
+│   └── apiError.js
+│
 ├── server.js
 ├── package.json
 └── README.md
@@ -73,11 +79,13 @@ debug-platform/
 ## Challenge Definition (`challenges/*.json`)
 
 Each challenge is defined as a JSON file.
+**This file is authoritative and server-only.**
 
-### Example
+### Example Challenge
 
 ```json
 {
+  "title": "Square of a Number",
   "language": "c",
   "baseCode": "#include <stdio.h>\n\nint main() {\n    int n;\n    scanf(\"%d\", &n);\n    printf(\"%d\\n\", n * n + 1);\n    return 0;\n}\n",
   "testcases": [
@@ -86,7 +94,10 @@ Each challenge is defined as a JSON file.
     { "input": "10\n", "expected": "100" }
   ],
   "anchors": ["scanf", "printf"],
-  "similarityThreshold": 70
+  "similarityThreshold": 70,
+  "description": "Fix the bug so the program prints the square of the input.",
+  "sampleInput": "5",
+  "sampleOutput": "25"
 }
 ```
 
@@ -96,11 +107,15 @@ Each challenge is defined as a JSON file.
 
 | Field                 | Description                                                   |
 | --------------------- | ------------------------------------------------------------- |
+| `title`               | Human-readable challenge title                                |
 | `language`            | Execution language (`c`, `python`)                            |
-| `baseCode`            | Buggy reference implementation (full file as string)          |
-| `testcases`           | List of stdin/stdout pairs                                    |
-| `anchors`             | *(Optional)* semantic landmarks that should survive debugging |
-| `similarityThreshold` | Minimum similarity % required **after** passing testcases     |
+| `baseCode`            | Buggy reference implementation (entire file as a string)      |
+| `testcases`           | List of stdin/stdout pairs (server-only)                      |
+| `anchors`             | *(Optional)* semantic landmarks preserved during debugging    |
+| `similarityThreshold` | Minimum similarity % required **after** passing all testcases |
+| `description`         | Problem description (safe to expose)                          |
+| `sampleInput`         | Example input (safe to expose)                                |
+| `sampleOutput`        | Example output (safe to expose)                               |
 
 ---
 
@@ -112,7 +127,7 @@ They answer the question:
 
 > *Did the participant preserve the original algorithm while fixing bugs?*
 
-Examples of good anchors:
+### Good Anchors
 
 * Function names
 * Helper utilities
@@ -120,20 +135,19 @@ Examples of good anchors:
 * Algorithm-specific strings
 * Key helper calls
 
-Examples of bad anchors:
+### Bad Anchors
 
 * Variable names
 * Formatting
-* Keywords like `int`, `return`
+* Language keywords
 * Magic numbers
 
-Anchors:
+### Anchor Rules
 
-* **Never block a correct solution**
-* **Only influence similarity**
-* **Scale with problem complexity**
-
-Small challenges may use **no anchors at all**.
+* Anchors **never block correctness**
+* Anchors **only influence similarity**
+* Anchors **scale with problem complexity**
+* Small challenges may have **no anchors**
 
 ---
 
@@ -156,7 +170,55 @@ Rules:
 
 * `submittedCode` must contain the **entire file**
 * Language is inferred from the challenge
-* Text files only (no binaries, no archives)
+* Text files only
+* Maximum size: **100 KB**
+
+---
+
+### `GET /challenges`
+
+List all available challenges (metadata only).
+
+#### Response
+
+```json
+[
+  {
+    "id": "example",
+    "language": "c",
+    "title": "Square of a Number"
+  }
+]
+```
+
+This endpoint is safe and **does not expose testcases or scoring logic**.
+
+---
+
+### `GET /challenges/:id`
+
+Fetch a single debugging challenge.
+
+#### Response
+
+```json
+{
+  "id": "example",
+  "title": "Square of a Number",
+  "language": "c",
+  "description": "Fix the bug so the program prints the square of the input.",
+  "debugCode": "#include <stdio.h> ...",
+  "sampleInput": "5",
+  "sampleOutput": "25"
+}
+```
+
+⚠️ **Never exposed**:
+
+* Testcases
+* Expected outputs
+* Anchors
+* Similarity threshold
 
 ---
 
@@ -167,7 +229,7 @@ Rules:
 3. If all testcases pass:
 
    * Compute similarity
-   * Compare with threshold
+   * Compare against threshold
 4. Return results **clearly separated**
 
 👉 **Similarity is never computed if testcases fail.**
@@ -202,7 +264,6 @@ Possible reasons:
   "testcases": { "status": "passed" },
   "similarity": {
     "score": 58.44,
-    "threshold": 70,
     "passed": false,
     "breakdown": {
       "weighted": 60.12,
@@ -224,7 +285,6 @@ Possible reasons:
   "testcases": { "status": "passed" },
   "similarity": {
     "score": 94.23,
-    "threshold": 70,
     "passed": true,
     "breakdown": {
       "weighted": 100.00,
@@ -243,8 +303,6 @@ All similarity values are **rounded to 2 decimal places**.
 
 ## Similarity Scoring (v2 – Debug-Aware)
 
-Similarity is a **weighted composite score**:
-
 ```
 Final Score =
   40% Weighted Line Similarity
@@ -254,15 +312,15 @@ Final Score =
 + Penalties
 ```
 
-### What It Rewards
+### Rewards
 
 * Minimal, localized edits
 * Preserved control flow
 * Variable renames
 * Formatting / whitespace changes
-* Debug-style fixes
+* Genuine debugging fixes
 
-### What It Penalizes
+### Penalizes
 
 * Full rewrites
 * Hardcoded outputs
@@ -295,15 +353,15 @@ All code runs inside **Docker sandboxes** with:
 
 To protect the host system:
 
-* Submissions are executed through an **in-process concurrency limiter**
-* Only a small number of executions run at once
+* Submissions run through an **in-process execution limiter**
+* Only a limited number execute concurrently
 * Excess requests wait safely in memory
 
-This avoids:
+This prevents:
 
 * Docker overload
 * CPU starvation
-* Random failures under load
+* Random runtime failures
 
 ---
 
@@ -357,7 +415,7 @@ http://localhost:3000
 
 ## Submitting Code
 
-### Using `curl` (recommended)
+### Using `curl`
 
 ```bash
 curl -X POST http://localhost:3000/submit \
@@ -384,4 +442,25 @@ fetch("/submit", {
   })
 });
 ```
+
+---
+
+
+| HTTP Code | Meaning                    | When It Occurs                                 |
+| --------: | -------------------------- | ---------------------------------------------- |
+|       200 | Success / Expected Outcome | Normal execution, testcase failure, similarity |
+|       400 | Bad Request                | Missing or invalid request fields              |
+|       404 | Not Found                  | Challenge does not exist                       |
+|       413 | Payload Too Large          | Submitted code exceeds size limit              |
+|       500 | Internal Server Error      | Unexpected server-side failure                 |
+
+
+---
+
+## Final Notes
+
+* This platform is **debug-first**, not solution-first
+* Similarity enforces **debugging discipline**, not plagiarism rules
+* Server-side authority is absolute
+* Public APIs expose **only safe information**
 
