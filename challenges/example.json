@@ -1,6 +1,11 @@
 {
+  "title": "Example Challenge",
+  "description": "Example description",
   "language": "python",
+  "debugCode": "n=int(input())\nprintf(x*x)\n",
   "baseCode": "n=int(input())\nprint(n*n)\n",
+  "sampleInput": "4\n",
+  "sampleOutput": "16",
   "testcases": [
     {
       "input": "2\n",

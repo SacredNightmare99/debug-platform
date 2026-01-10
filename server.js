@@ -94,6 +94,54 @@ app.post("/submit", async (req, res, next) => {
   }
 });
 
+app.get("/challenges", (req, res, next) => {
+  try {
+    const files = fs.readdirSync("./challenges");
+
+    const list = files.map(file => {
+      const id = file.replace(".json", "");
+      const c = JSON.parse(
+        fs.readFileSync(`./challenges/${file}`, "utf8")
+      );
+
+      return {
+        id,
+        language: c.language,
+        title: c.title || id
+      };
+    });
+
+    res.json(list);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/challenges/:id", (req, res, next) => {
+  try {
+    const challengeId = req.params.id;
+    const path = `./challenges/${challengeId}.json`;
+
+    if (!fs.existsSync(path)) {
+      throw new ApiError(404, "Challenge not found");
+    }
+
+    const raw = JSON.parse(fs.readFileSync(path, "utf8"));
+
+    res.json({
+      id: challengeId,
+      title: raw.title,
+      language: raw.language,
+      description: raw.description || "",
+      debugCode: raw.debugCode || "No debugCode found",
+      sampleInput: raw.sampleInput || "",
+      sampleOutput: raw.sampleOutput || ""
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 app.listen(3000, "0.0.0.0", () => {
   console.log("Server running on port 3000");
 });
