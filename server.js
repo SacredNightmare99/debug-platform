@@ -78,7 +78,6 @@ app.post("/submit", async (req, res, next) => {
     console.log(
       `[REQ ${reqId}] Similarity: ${similarity.total.toFixed(2)}% | Passed: ${passed}`
     );
-
     res.status(200).json({
       testcases: {
         status: "passed"
@@ -86,7 +85,8 @@ app.post("/submit", async (req, res, next) => {
       similarity: {
         score: Number(similarity.total.toFixed(2)),
         passed,
-        breakdown: similarity.breakdown
+        breakdown: similarity.breakdown,
+        threshold: challenge.similarityThreshold
       }
     });
   } catch (err) {
@@ -142,8 +142,8 @@ app.get("/challenges/:id", (req, res, next) => {
   }
 });
 
-app.listen(3000, "0.0.0.0", () => {
-  console.log("Server running on port 3000");
+app.listen(4000, "0.0.0.0", () => {
+  console.log("Server running on port 4000");
 });
 
 app.use((err, req, res, next) => {

@@ -87,6 +87,7 @@ Each challenge is defined as a JSON file.
 {
   "title": "Square of a Number",
   "language": "c",
+  "debugCode": "<debug code here>",
   "baseCode": "#include <stdio.h>\n\nint main() {\n    int n;\n    scanf(\"%d\", &n);\n    printf(\"%d\\n\", n * n + 1);\n    return 0;\n}\n",
   "testcases": [
     { "input": "2\n", "expected": "4" },
@@ -271,7 +272,8 @@ Possible reasons:
       "anchors": 33.33,
       "structure": 70.00,
       "penalty": -10.00
-    }
+    },
+    "threshold": 70
   }
 }
 ```
@@ -292,7 +294,8 @@ Possible reasons:
       "anchors": 100.00,
       "structure": 100.00,
       "penalty": 0.00
-    }
+    },
+    "threshold": 70
   }
 }
 ```
@@ -408,7 +411,7 @@ node server.js
 Server runs on:
 
 ```
-http://localhost:3000
+http://localhost:4000
 ```
 
 ---
